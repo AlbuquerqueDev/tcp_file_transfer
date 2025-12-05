@@ -71,11 +71,12 @@ def main():
 
             if status == 0:
                 print("Arquivo não existe.")
+                exit(1)
             elif status == 1:
                 print("Arquivo encontrado! Iniciando o download.")
             else:
                 print("Erro durante a requisição do nome de arquivo.")
-
+                exit(1)
             try:
                 file_size_bytes = s.recv(4)
             except socket.timeout:
