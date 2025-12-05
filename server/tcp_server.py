@@ -18,11 +18,18 @@ def validar_ipv4(addr: str) -> bool:
     return True
 
 
-FILE_NAME = "lorem_ipsum.txt"
+FILE_DIR = "./SERVER_FILES"
+
+if not os.path.exists(FILE_DIR):
+    try:
+        print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
+        os.makedirs(FILE_DIR, exist_ok=True)
+        print(f"Diretório {FILE_DIR} criado com sucesso!\n")
+    except Exception as e:
+        print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
 
 
 def send_file(s, file_name):
-    bytes_sent = 0
     with open(file_name, 'rb') as f:
         while True:
             data = f.read(4096)
@@ -30,6 +37,9 @@ def send_file(s, file_name):
                 break
             s.send(data)
     print(f"Arquivo {file_name} enviado com sucesso.")
+
+
+FILE_NAME = "lorem_ipsum.txt"
 
 
 def main():
@@ -56,6 +66,7 @@ def main():
             s.bind((HOST, PORT))
             s.listen(1)
             print(f"Servidor iniciado em {HOST}:{PORT}")
+            print(f"Diretório de arquivos: {os.path.abspath(FILE_DIR)}")
             print("Aguardando conexões...\n")
 
             while True:
