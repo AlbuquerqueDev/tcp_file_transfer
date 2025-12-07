@@ -1,6 +1,6 @@
+import os
 import socket
 import struct
-import os
 import sys
 
 
@@ -12,12 +12,13 @@ def validar_ipv4(addr: str) -> bool:
             socket.inet_aton(addr)
         except socket.error:
             return False
-        return addr.count('.') == 3
+        return addr.count(".") == 3
     except socket.error:
         return False
     return True
 
 
+FILE_NAME = "lorem_ipsum.txt"
 FILE_DIR = "./SERVER_FILES"
 
 if not os.path.exists(FILE_DIR):
@@ -29,17 +30,55 @@ if not os.path.exists(FILE_DIR):
         print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
 
 
-def send_file(s, file_name):
-    with open(file_name, 'rb') as f:
-        while True:
-            data = f.read(4096)
-            if not data:
+def send_file(conn: socket, addr: tuple, file_name):
+    while True:
+        try:
+            file_length_data = conn.recv(4)
+
+            if not file_length_data:
+                print(f"Cliente {addr} desonectou.")
                 break
-            s.send(data)
-    print(f"Arquivo {file_name} enviado com sucesso.")
 
+            file_name_length = struct.unpack(">I", file_length_data)[0]
 
-FILE_NAME = "lorem_ipsum.txt"
+            file_name_data = conn.recv(file_name_length)
+            file_name = file_name_data.decode()
+
+            print(f"Arquivo solicitado: {file_name}")
+
+            if file_name != "lorem_ipsum.txt":
+                status = struct.pack(">B", 0)
+                conn.send(status)
+
+            status = struct.pack(">B", 1)
+            conn.send(status)
+            print(f"Arquivo encontrado: {FILE_NAME}")
+
+            file_size = os.path.getsize(FILE_NAME)
+            print(f"Tamanho do arquivo: {file_size} bytes")
+
+            size_bytes = struct.pack(">I", file_size)
+            conn.send(size_bytes)
+
+            with open(file_name, "rb") as f:
+                while True:
+                    data = f.read(1024)
+                    if not data:
+                        break
+                    conn.send(data)
+            print(f"Arquivo {file_name} enviado com sucesso.")
+
+        except socket.timeout:
+            print("Timeout ao aguardar dados do cliente.")
+            continue
+        except UnicodeDecodeError as e:
+            print(f"Erro ao decodificar nome do arquivo: {e}")
+            try:
+                status = struct.pack(">B", 1)
+                conn.send(status)
+            except:
+                pass
+            continue
 
 
 def main():
@@ -73,47 +112,15 @@ def main():
                 conn, addr = s.accept()
                 print(f"\nNova conexão: {addr}")
                 with conn:
-                    while True:
-                        try:
-                            file_length_data = conn.recv(1)
+                    download_file_signal = conn.recv(1)
+                    (signal_code,) = struct.unpack(">B", download_file_signal)
+                    print(f"Signal code recebido: {signal_code}")
 
-                            if not file_length_data:
-                                print(f"Cliente {addr} desonectou.")
-                                break
-
-                            file_name_length = struct.unpack(
-                                '>B', file_length_data)[0]
-
-                            file_name_data = conn.recv(file_name_length)
-                            file_name = file_name_data.decode()
-
-                            print(f"Arquivo solicitado: {file_name}")
-
-                            if file_name != "lorem_ipsum.txt":
-                                status = struct.pack('>B', 0)
-                                conn.send(status)
-
-                            status = struct.pack('>B', 1)
-                            conn.send(status)
-                            print(f"Arquivo encontrado: {FILE_NAME}")
-
-                            file_size = os.path.getsize(FILE_NAME)
-                            print(f"Tamanho do arquivo: {file_size} bytes")
-
-                            size_bytes = struct.pack('>I', file_size)
-                            conn.send(size_bytes)
-                            send_file(conn, FILE_NAME)
-                        except socket.timeout:
-                            print("Timeout ao aguardar dados do cliente.")
-                            continue
-                        except UnicodeDecodeError as e:
-                            print(f"Erro ao decodificar nome do arquivo: {e}")
-                            try:
-                                status = struct.pack('>B', 1)
-                                conn.send(status)
-                            except:
-                                pass
-                            continue
+                    match signal_code:
+                        case 10:
+                            send_file(conn, addr, FILE_NAME)
+                        case _:
+                            print("Operacao inválida.")
         except KeyboardInterrupt:
             print("\nEncerrando...")
 
