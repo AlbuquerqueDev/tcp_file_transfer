@@ -1,9 +1,12 @@
+import json
 import os
 import socket
 import struct
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+FILE_DIR = os.path.join(SCRIPT_DIR, "downloaded_files")
+BUFFSIZE = 1024
 
 
 def validar_ipv4(addr: str) -> bool:
@@ -20,36 +23,51 @@ def validar_ipv4(addr: str) -> bool:
     return True
 
 
+def create_file_dir():
+    if not os.path.exists(FILE_DIR):
+        try:
+            print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
+            os.makedirs(FILE_DIR, exist_ok=True)
+            print(f"Diretório {FILE_DIR} criado com sucesso!\n")
+        except Exception as e:
+            print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
+
+
 def user_interface(conn: socket):
-    print("=" * 20)
-    print("TCP Fileserver")
-    print("=" * 20)
+    while True:
+        print("=" * 20)
+        print("TCP Fileserver")
+        print("=" * 20)
 
-    print("-" * 20)
-    print("O que deseja fazer?")
-    print("[1] Baixar um arquivo")
-    print("[2] Listar arquivos disponíveis")
-    print("-" * 20)
+        print("-" * 20)
+        print("O que deseja fazer?")
+        print("[1] Baixar um arquivo")
+        print("[2] Listar arquivos disponíveis")
+        print("-" * 20)
 
-    opcao = input("Digite uma opcao: ").strip()
+        opcao = input("Digite uma opcao: ").strip()
 
-    match opcao:
-        case "1":
-            download_file(conn)
+        match opcao:
+            case "1":
+                download_file(conn)
+            case "2":
+                list_files(conn)
+            case _:
+                print("Operacao inválida.")
 
 
-def download_file(conn: socket):
+def download_file(conn: socket.socket):
     file_name = input("Informe o nome do arquivo para download: ")
     if not file_name:
         print("Informe um nome!")
         exit(1)
 
     file_name_length = len(file_name)
+    try:
+        byte_operacao = struct.pack(">B", 10)
+        conn.send(byte_operacao)
+        print("Enviando código de operacao 10 (download)...")
 
-    byte_operacao = struct.pack(">B", 10)
-    download_signal = conn.send(byte_operacao)
-
-    if download_signal:
         fl_bytes = struct.pack(">I", file_name_length)
         conn.send(fl_bytes)
         print("[-] Enviando o tamanho do nome do arquivo...")
@@ -58,57 +76,114 @@ def download_file(conn: socket):
         conn.send(fn_bytes)
         print("[-] Enviando o nome do arquivo...")
 
-    print(f"Arquivo solicitado: {file_name}")
+        print(f"Arquivo {file_name} solicitado com sucesso.")
 
-    try:
         status_data = conn.recv(1)
-    except socket.timeout:
-        print("ERRO: tempo de espera excedido.")
-        exit(1)
+        if not status_data:
+            print("ERRO: Conexao fechada pelo servidor.")
+            return
 
-    status = struct.unpack(">B", status_data)[0]
+        status = struct.unpack(">B", status_data)[0]
 
-    if status == 0:
-        print("Arquivo não existe.")
-        exit(1)
-    elif status == 1:
-        print("Arquivo encontrado! Iniciando o download.")
-    else:
-        print("Erro durante a requisição do nome de arquivo.")
-        exit(1)
-    try:
+        if status == 0:
+            print("ERRO: Arquivo não existe no servidor.")
+            return
+        elif status == 1:
+            print("Arquivo encontrado! Iniciando o download...")
+        else:
+            print(f"ERRO: Status desconhecido {status}")
+            return
+
         file_size_bytes = conn.recv(4)
+        if len(file_size_bytes) != 4:
+            print("ERRO: tamanho de arquivo inválido.")
+            return
+
+        file_size = struct.unpack(">I", file_size_bytes)[0]
+        print(f"Tamanho do arquivo: {file_size} bytes")
+
+        file_data = b""
+        bytes_received = 0
+
+        while bytes_received < file_size:
+            chunk = conn.recv(min(BUFFSIZE, file_size - bytes_received))
+            if not chunk:
+                print("ERRO: Conexão fechada durante download.")
+                return
+            file_data += chunk
+            bytes_received += len(chunk)
+
+        output_name = os.path.join(FILE_DIR, f"download_{file_name}")
+
+        with open(output_name, "wb") as f:
+            f.write(file_data)
+
+        print(f"Download concluído! Arquivo salvo em {output_name}")
     except socket.timeout:
-        print("ERRO: tempo de espera excedido.")
-        exit(1)
-    except socket.ConnectionRefusedError:
-        print("ERRO: Conexão perdida: porta inacessiva")
-        exit(1)
+        print("ERRO: Tempo de espera excedido.")
+    except ConnectionRefusedError:
+        print("ERRO: Conexão resetada pelo servidor.")
+    except Exception as e:
+        print(f"Erro durante download: {e}")
 
-    if len(file_size_bytes) != 4:
-        print("tamanho de arquivo inválido.")
-        exit(1)
 
-    file_size = struct.unpack(">I", file_size_bytes)[0]
+def list_files(conn: socket.socket):
+    try:
+        byte_operacao = struct.pack(">B", 20)
+        conn.send(byte_operacao)
+        print("Enviando código de operacao 20 (listagem de arquivos)")
 
-    print(f"Tamanho do arquivo: {file_size} bytes")
+        status_data = conn.recv(1)
+        if not status_data:
+            print("ERRO: Conexão f3chada pelo servidor.")
+            return
 
-    file_data = b""
-    bytes_received = 0
+        status = struct.unpack(">B", status_data)[0]
 
-    while bytes_received < file_size:
+        if status == 0:
+            print("Erro durante o envio de listagem.")
+            return
+        elif status != 1:
+            print(f"ERRO: Status desconhecido: {(status)}")
+            return
+        print("[-] Recebendo lista de arquivos...")
+
+        list_size_data = conn.recv(4)
+        if len(list_size_data) != 4:
+            print("ERRO: Tamanho de lista inválido.")
+            return
+
+        list_size = struct.unpack(">I", list_size_data)[0]
+        print(f"[-] Tamanho da lista: {list_size} bytes")
+
+        list_data = b""
+        bytes_received = 0
+
+        while bytes_received < list_size:
+            chunk = conn.recv(min(BUFFSIZE, list_size - bytes_received))
+            if not chunk:
+                print("ERRO: Conexão fechada durante recebimento da lista.")
+                return
+            list_data += chunk
+            bytes_received += len(chunk)
         try:
-            chunk = conn.recv(1024)
-        except socket.timeout:
-            print("ERRO: tempo de espera excedido!")
-            exit(1)
-        file_data += chunk
-        bytes_received += len(chunk)
+            file_list = list_data.decode("utf-8")
 
-    output_name = os.path.join(SCRIPT_DIR, f"download_{file_name}")
-
-    with open(output_name, "wb") as f:
-        f.write(file_data)
+            print("=" * 20)
+            print("Arquivos disponíveis para download: ")
+            print("=" * 20)
+            print(file_list)
+            print("=" * 20)
+        except json.JSONDecodeError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+        except Exception as e:
+            print(f"Erro ao processar a listagem: {e}")
+    except socket.timeout:
+        print("ERRO: Tempo de espera excedido.")
+    except ConnectionRefusedError:
+        print("ERRO: Conexão resetada pelo servidor.")
+    except Exception as e:
+        print(f"Erro durante download: {e}")
 
 
 def main():
@@ -126,25 +201,28 @@ def main():
     except ValueError:
         print("Erro: A porta deve ser um número inteiro.")
 
-    if PORT < 1 or PORT > 65535:
-        print("Erro: A porta deve estar entre 1 e 65535.")
+    if PORT < 1024 or PORT > 65535:
+        print("Erro: A porta deve estar entre 1024 e 65535.")
         exit(1)
 
     print(f"Conectando ao servidor {HOST}:{PORT}")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
-            print(f"Conectado no host: {HOST}:{PORT}")
+            print(f"\nConexão estabelecida com o host: {HOST}:{PORT}")
 
             user_interface(s)
 
-        except ConnectionRefusedError:
-            print(f"Erro: Não foi possível conectar ao servidor {HOST}:{PORT}")
-            print("Verifique se o servidor está acessível.")
-            exit(1)
-        except KeyboardInterrupt:
-            print("\nEncerrando...")
-            exit(1)
+    except ConnectionRefusedError:
+        print(f"Erro: Não foi possível conectar ao servidor {HOST}:{PORT}")
+        print("Verifique se o servidor está acessível.")
+        exit(1)
+    except KeyboardInterrupt:
+        print("\nEncerrando...")
+        exit(0)
+    except Exception as e:
+        print(f"ERRO: {e}")
 
 
 if __name__ == "__main__":
