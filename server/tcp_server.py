@@ -3,6 +3,10 @@ import socket
 import struct
 import sys
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+FILE_DIR = os.path.join(SCRIPT_DIR, "files")
+FILE_NAME = os.path.join(FILE_DIR, "lorem_ipsum.txt")
+
 
 def validar_ipv4(addr: str) -> bool:
     try:
@@ -18,16 +22,14 @@ def validar_ipv4(addr: str) -> bool:
     return True
 
 
-FILE_NAME = "lorem_ipsum.txt"
-FILE_DIR = "./SERVER_FILES"
-
-if not os.path.exists(FILE_DIR):
-    try:
-        print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
-        os.makedirs(FILE_DIR, exist_ok=True)
-        print(f"Diretório {FILE_DIR} criado com sucesso!\n")
-    except Exception as e:
-        print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
+def create_file_dir():
+    if not os.path.exists(FILE_DIR):
+        try:
+            print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
+            os.makedirs(FILE_DIR, exist_ok=True)
+            print(f"Diretório {FILE_DIR} criado com sucesso!\n")
+        except Exception as e:
+            print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
 
 
 def send_file(conn: socket, addr: tuple, file_name):
@@ -46,21 +48,28 @@ def send_file(conn: socket, addr: tuple, file_name):
 
             print(f"Arquivo solicitado: {file_name}")
 
+            full_file_path = os.path.join(FILE_DIR, file_name)
+            if not full_file_path.startswith(os.path.abspath(FILE_DIR)):
+                print("Acesso fora do diretório de arquivos negado.")
+                status = struct.pack(">B", 0)
+                conn.send(status)
+                continue
             if file_name != "lorem_ipsum.txt":
                 status = struct.pack(">B", 0)
                 conn.send(status)
+                continue
 
             status = struct.pack(">B", 1)
             conn.send(status)
-            print(f"Arquivo encontrado: {FILE_NAME}")
+            print(f"Arquivo encontrado: {file_name}")
 
-            file_size = os.path.getsize(FILE_NAME)
+            file_size = os.path.getsize(full_file_path)
             print(f"Tamanho do arquivo: {file_size} bytes")
 
             size_bytes = struct.pack(">I", file_size)
             conn.send(size_bytes)
 
-            with open(file_name, "rb") as f:
+            with open(full_file_path, "rb") as f:
                 while True:
                     data = f.read(1024)
                     if not data:
@@ -100,12 +109,15 @@ def main():
         print("Erro: A porta deve estar entre 1 e 65535.")
         exit(1)
 
+    # inicia o diretório de arquivos
+    create_file_dir()
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.bind((HOST, PORT))
             s.listen(1)
             print(f"Servidor iniciado em {HOST}:{PORT}")
-            print(f"Diretório de arquivos: {os.path.abspath(FILE_DIR)}")
+            print(f"Diretório de arquivos: {FILE_DIR}")
             print("Aguardando conexões...\n")
 
             while True:

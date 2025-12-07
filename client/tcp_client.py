@@ -1,6 +1,9 @@
+import os
 import socket
 import struct
 import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def validar_ipv4(addr: str) -> bool:
@@ -102,7 +105,7 @@ def download_file(conn: socket):
         file_data += chunk
         bytes_received += len(chunk)
 
-    output_name = f"baixado_{file_name}"
+    output_name = os.path.join(SCRIPT_DIR, f"download_{file_name}")
 
     with open(output_name, "wb") as f:
         f.write(file_data)
