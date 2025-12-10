@@ -26,11 +26,13 @@ def validar_ipv4(addr: str) -> bool:
 def create_file_dir():
     if not os.path.exists(FILE_DIR):
         try:
-            print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
+            print(f"Criando o diretório de arquivos para download: {
+                  FILE_DIR}\n")
             os.makedirs(FILE_DIR, exist_ok=True)
             print(f"Diretório {FILE_DIR} criado com sucesso!\n")
         except Exception as e:
-            print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
+            print(f"ERRO: Não foi possível criar o diretório '{
+                  FILE_DIR}': {e}\n")
 
 
 def user_interface(conn: socket):
@@ -113,7 +115,7 @@ def download_file(conn: socket.socket):
             file_data += chunk
             bytes_received += len(chunk)
 
-        output_name = os.path.join(FILE_DIR, f"download_{file_name}")
+        output_name = os.path.join(FILE_DIR, file_name)
 
         with open(output_name, "wb") as f:
             f.write(file_data)
@@ -204,6 +206,8 @@ def main():
     if PORT < 1024 or PORT > 65535:
         print("Erro: A porta deve estar entre 1024 e 65535.")
         exit(1)
+
+    create_file_dir()
 
     print(f"Conectando ao servidor {HOST}:{PORT}")
 
