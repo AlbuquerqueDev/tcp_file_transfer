@@ -104,21 +104,16 @@ def download_file(conn: socket.socket):
         file_size = struct.unpack(">I", file_size_bytes)[0]
         print(f"Tamanho do arquivo: {file_size} bytes")
 
-        file_data = b""
-        bytes_received = 0
-
-        while bytes_received < file_size:
-            chunk = conn.recv(min(BUFFSIZE, file_size - bytes_received))
-            if not chunk:
-                print("ERRO: Conexão fechada durante download.")
-                return
-            file_data += chunk
-            bytes_received += len(chunk)
-
         output_name = os.path.join(FILE_DIR, file_name)
 
         with open(output_name, "wb") as f:
-            f.write(file_data)
+            bytes_received = 0
+            while bytes_received < file_size:
+                chunk = conn.recv(BUFFSIZE)
+                if not chunk:
+                    break
+                f.write(chunk)
+                bytes_received += len(chunk)
 
         print(f"Download concluído! Arquivo salvo em {output_name}")
     except socket.timeout:
