@@ -26,11 +26,13 @@ def validar_ipv4(addr: str) -> bool:
 def create_file_dir():
     if not os.path.exists(FILE_DIR):
         try:
-            print(f"Criando o diretório de arquivos para download: {FILE_DIR}\n")
+            print(f"Criando o diretório de arquivos para download: {
+                  FILE_DIR}\n")
             os.makedirs(FILE_DIR, exist_ok=True)
             print(f"Diretório {FILE_DIR} criado com sucesso!\n")
         except Exception as e:
-            print(f"ERRO: Não foi possível criar o diretório '{FILE_DIR}': {e}\n")
+            print(f"ERRO: Não foi possível criar o diretório '{
+                  FILE_DIR}': {e}\n")
             exit(1)
 
 
