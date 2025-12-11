@@ -82,7 +82,7 @@ def send_file(conn: socket, addr: tuple):
                 data = f.read(BUFFSIZE)
                 if not data:
                     break
-                conn.send(data)
+                conn.sendall(data)
                 bytes_sent += len(data)
 
         print(f"{file_name} enviado com sucesso. ({bytes_sent}) bytes enviados")
@@ -173,39 +173,26 @@ def gerenciar_client(conn: socket.socket, addr: tuple):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Exemplo de uso: tcp_client <HOST> <PORTA>")
-        exit(1)
 
-    HOST = sys.argv[1]
-
-    if not validar_ipv4(HOST):
-        print(f"Erro: '{HOST}' não é um endereço IP válido!")
-        exit(1)
-    try:
-        PORT = int(sys.argv[2])
-    except ValueError:
-        print("Erro: A porta deve ser um número inteiro.")
-
-    if PORT < 1 or PORT > 65535:
-        print("Erro: A porta deve estar entre 1 e 65535.")
-        exit(1)
+    HOST = ''
+    PORT = 20000
 
     # inicia o diretório de arquivos
     create_file_dir()
+    print(f"Diretório de arquivos: {FILE_DIR}")
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         s.bind((HOST, PORT))
-        s.listen(5)
+        print("Servidor TCP Iniciado!")
 
-        print(f"Servidor iniciado em {HOST}:{PORT}")
-        print(f"Diretório de arquivos: {FILE_DIR}")
-        print("Aguardando conexões...\n")
+        s.listen(5)
+        print("Aguardando conexões em qualquer interface...\n")
 
         while True:
             try:
                 conn, addr = s.accept()
+                print(f"Cliente {addr} está conectado.")
                 with conn:
                     gerenciar_client(conn, addr)
 
