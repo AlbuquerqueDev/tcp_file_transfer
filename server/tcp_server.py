@@ -2,7 +2,6 @@ import json
 import os
 import socket
 import struct
-import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FILE_DIR = os.path.join(SCRIPT_DIR, "files")
@@ -23,16 +22,16 @@ def validar_ipv4(addr: str) -> bool:
     return True
 
 
-def create_file_dir():
-    if not os.path.exists(FILE_DIR):
+def create_file_dir(file_dir: str):
+    if not os.path.exists(file_dir):
         try:
             print(f"Criando o diretório de arquivos para download: {
-                  FILE_DIR}\n")
-            os.makedirs(FILE_DIR, exist_ok=True)
-            print(f"Diretório {FILE_DIR} criado com sucesso!\n")
+                  file_dir}\n")
+            os.makedirs(file_dir, exist_ok=True)
+            print(f"Diretório {file_dir} criado com sucesso!\n")
         except Exception as e:
             print(f"ERRO: Não foi possível criar o diretório '{
-                  FILE_DIR}': {e}\n")
+                  file_dir}': {e}\n")
             exit(1)
 
 
@@ -56,17 +55,17 @@ def send_file(conn: socket, addr: tuple):
 
         if not full_file_path.startswith(os.path.abspath(FILE_DIR)):
             print("[!] ATENCAO: Acesso fora do diretório de arquivos negado.")
-            status = struct.pack(">B", 0)
+            status = struct.pack(">B", 1)
             conn.send(status)
             return True
 
         if not os.path.exists(full_file_path):
             print(f"ERRO: Arquivo não encontrado: {full_file_path}")
-            status = struct.pack(">B", 0)
+            status = struct.pack(">B", 1)
             conn.send(status)
             return True
 
-        status = struct.pack(">B", 1)
+        status = struct.pack(">B", 0)
         conn.send(status)
         print(f"Arquivo encontrado: {file_name}")
 
@@ -90,7 +89,7 @@ def send_file(conn: socket, addr: tuple):
     except UnicodeDecodeError as e:
         print(f"Erro ao decodificar nome do arquivo: {e}")
         try:
-            status = struct.pack(">B", 0)
+            status = struct.pack(">B", 1)
             conn.send(status)
         except:
             pass
@@ -117,7 +116,7 @@ def send_file_list(conn: socket.socket, addr: tuple):
         json_bytes = json_data.encode("utf-8")
         json_size = len(json_bytes)
 
-        status = struct.pack(">B", 1)
+        status = struct.pack(">B", 0)
         conn.send(status)
 
         json_size_data = struct.pack(">I", json_size)
@@ -130,10 +129,80 @@ def send_file_list(conn: socket.socket, addr: tuple):
     except Exception as e:
         print(f"Erro ao enviar lista de arquivos: {e}")
         try:
-            status = struct.pack(">B", 0)
+            status = struct.pack(">B", 1)
             conn.send(status)
         except:
             pass
+        return False
+
+
+def receive_upload(conn: socket.socket, addr: tuple):
+
+    UPLOAD_DIR = os.path.join(SCRIPT_DIR, "client_uploaded_files")
+    create_file_dir(UPLOAD_DIR)
+
+    try:
+        file_length_data = conn.recv(4)
+
+        if not file_length_data:
+            print(f"Cliente {addr} desconectou.")
+            return False
+
+        file_name_length = struct.unpack(">I", file_length_data)[0]
+        print(f"[-] Tamanho do nome: {file_name_length} bytes")
+
+        file_name_data = conn.recv(file_name_length)
+        file_name = file_name_data.decode('utf-8')
+        print(f"[-] Arquivo a ser recebido {file_name}")
+
+        full_file_path = os.path.join(UPLOAD_DIR, file_name)
+        full_file_path = os.path.normpath(full_file_path)
+
+        if not full_file_path.startswith(os.path.abspath(UPLOAD_DIR)):
+            print("[!] ATENCAO: Acesso fora do diretório de arquivos negado.")
+            status = struct.pack(">B", 1)
+            conn.send(status)
+            return True
+
+        status = struct.pack(">B", 0)
+        conn.send(status)
+        print("[-] Upload aceito, os bytes serão esperados...")
+
+        file_size_bytes = conn.recv(4)
+        if len(file_size_bytes) != 4:
+            print("ERRO: tamanho de arquivo inválido.")
+            return
+
+        file_size = struct.unpack(">I", file_size_bytes)[0]
+        print(f"Tamanho do arquivo: {file_size} bytes")
+
+        output_name = os.path.join(UPLOAD_DIR, file_name)
+
+        with open(output_name, "wb") as f:
+            bytes_received = 0
+            while bytes_received < file_size:
+                chunk = conn.recv(BUFFSIZE)
+                if not chunk:
+                    break
+                f.write(chunk)
+                bytes_received += len(chunk)
+        print(f"Upload concluído! Arquivo salvo em {
+              UPLOAD_DIR.split("/")[-1]}/{file_name}")
+
+        if bytes_received == file_size:
+            upload_stauts = struct.pack(">B", 0)
+            conn.send(upload_stauts)
+            return True
+    except UnicodeDecodeError as e:
+        print(f"Erro ao decodificar nome do arquivo: {e}")
+        try:
+            status = struct.pack(">B", 1)
+            conn.send(status)
+        except:
+            pass
+        return False
+    except Exception as e:
+        print(f"Erro durante recebimento do arquivo: {e}")
         return False
 
 
@@ -158,11 +227,15 @@ def gerenciar_client(conn: socket.socket, addr: tuple):
                     print("[-] 20 - Listar arquivos")
                     if not send_file_list(conn, addr):
                         break
+                case 30:
+                    print("[-] 30 - Upload de arquivos")
+                    if not receive_upload(conn, addr):
+                        break
                 case _:
                     print(f"Operacao inválida ({signal_code})")
 
                     try:
-                        status = struct.pack(">B", 0)
+                        status = struct.pack(">B", 1)
                         conn.send(status)
                     except:
                         pass
@@ -178,7 +251,8 @@ def main():
     PORT = 20000
 
     # inicia o diretório de arquivos
-    create_file_dir()
+    create_file_dir(FILE_DIR)
+
     print(f"Diretório de arquivos: {FILE_DIR}")
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
