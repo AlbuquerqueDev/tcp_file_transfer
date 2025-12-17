@@ -25,13 +25,11 @@ def validar_ipv4(addr: str) -> bool:
 def create_file_dir(file_dir: str):
     if not os.path.exists(file_dir):
         try:
-            print(f"Criando o diretório de arquivos para download: {
-                  file_dir}\n")
+            print(f"Criando o diretório de arquivos para download: {file_dir}\n")
             os.makedirs(file_dir, exist_ok=True)
             print(f"Diretório {file_dir} criado com sucesso!\n")
         except Exception as e:
-            print(f"ERRO: Não foi possível criar o diretório '{
-                  file_dir}': {e}\n")
+            print(f"ERRO: Não foi possível criar o diretório '{file_dir}': {e}\n")
             exit(1)
 
 
@@ -186,8 +184,7 @@ def receive_upload(conn: socket.socket, addr: tuple):
                     break
                 f.write(chunk)
                 bytes_received += len(chunk)
-        print(f"Upload concluído! Arquivo salvo em {
-              UPLOAD_DIR.split("/")[-1]}/{file_name}")
+        print(f"Upload concluído! Arquivo salvo em {UPLOAD_DIR.split("/")[-1]}/{file_name}")
 
         if bytes_received == file_size:
             upload_stauts = struct.pack(">B", 0)
@@ -261,7 +258,20 @@ def main():
         print("Servidor TCP Iniciado!")
 
         s.listen(5)
-        print("Aguardando conexões em qualquer interface...\n")
+        ips = []
+        try:
+            hostname = socket.gethostname()
+
+            ip_list = socket.gethostbyname_ex(hostname)[2]
+
+            print("Aguardando conexões nos seguintes endereços...")
+            for ip in ip_list:
+                if not ip.startswith('127.'):
+                    ips.append(ip)
+                    print(ip)
+        except socket.error as e:
+            print('Erro durante obtenção de ips')
+            exit(1)      
 
         while True:
             try:
