@@ -4,60 +4,61 @@ import os
 import json
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SCRIPT_DIR = os.path.join(SCRIPT_DIR, "files")
-BUFFSIZE = 1024
+SCRIPT_DIR = os.path.join(SCRIPT_DIR, "arquivos")
+BUFSIZE = 1024
 
 
-def send_file(conn: socket, addr: tuple):
+def enviar_arquivo(conn: socket, addr: tuple):
     try:
-        file_length_data = conn.recv(4)
+        tamanho_arquivo_bytes = conn.recv(4)
 
-        if not file_length_data:
+        if not tamanho_arquivo_bytes:
             print(f"Cliente {addr} desonectou.")
             return False
 
-        file_name_length = struct.unpack(">I", file_length_data)[0]
-        print(f"[-] Tamanho do nome: {file_name_length} bytes")
+        tamanho_nome_arquivo = struct.unpack(">I", tamanho_arquivo_bytes)[0]
+        print(f"[-] Tamanho do nome: {tamanho_nome_arquivo} bytes")
 
-        file_name_data = conn.recv(file_name_length)
-        file_name = file_name_data.decode("utf-8")
-        print(f"[-] Arquivo solicitado: {file_name}")
+        nome_arquivo_bytes = conn.recv(tamanho_nome_arquivo)
+        nome_arquivo = nome_arquivo_bytes.decode("utf-8")
+        print(f"[-] Arquivo solicitado: {nome_arquivo}")
 
-        full_file_path = os.path.join(SCRIPT_DIR, file_name)
-        full_file_path = os.path.normpath(full_file_path)
+        caminho_arquivo = os.path.join(SCRIPT_DIR, nome_arquivo)
+        caminho_arquivo = os.path.normpath(caminho_arquivo)
 
-        if not full_file_path.startswith(os.path.abspath(SCRIPT_DIR)):
+        if not caminho_arquivo.startswith(os.path.abspath(SCRIPT_DIR)):
             print("[!] ATENCAO: Acesso fora do diretório de arquivos negado.")
             status = struct.pack(">B", 1)
             conn.send(status)
             return True
 
-        if not os.path.exists(full_file_path):
-            print(f"ERRO: Arquivo não encontrado: {full_file_path}")
+        if not os.path.exists(caminho_arquivo):
+            print(f"ERRO: Arquivo não encontrado: {caminho_arquivo}")
             status = struct.pack(">B", 1)
             conn.send(status)
             return True
 
         status = struct.pack(">B", 0)
         conn.send(status)
-        print(f"Arquivo encontrado: {file_name}")
+        print(f"Arquivo encontrado: {nome_arquivo}")
 
-        file_size = os.path.getsize(full_file_path)
-        print(f"[-] Tamanho do arquivo: {file_size} bytes")
+        tamanho_arquivo = os.path.getsize(caminho_arquivo)
+        print(f"[-] Tamanho do arquivo: {tamanho_arquivo} bytes")
 
-        size_bytes = struct.pack(">I", file_size)
-        conn.send(size_bytes)
+        tamanho_bytes = struct.pack(">I", tamanho_arquivo)
+        conn.send(tamanho_bytes)
 
-        bytes_sent = 0
-        with open(full_file_path, "rb") as f:
+        bytes_enviados = 0
+        with open(caminho_arquivo, "rb") as f:
             while True:
-                data = f.read(BUFFSIZE)
-                if not data:
+                dados = f.read(BUFSIZE)
+                if not dados:
                     break
-                conn.sendall(data)
-                bytes_sent += len(data)
+                conn.sendall(dados)
+                bytes_enviados += len(dados)
 
-        print(f"{file_name} enviado com sucesso. ({bytes_sent}) bytes enviados")
+        print(f"{nome_arquivo} enviado com sucesso. ({
+              bytes_enviados}) bytes enviados")
         return True
     except UnicodeDecodeError as e:
         print(f"Erro ao decodificar nome do arquivo: {e}")
@@ -72,28 +73,29 @@ def send_file(conn: socket, addr: tuple):
         return False
 
 
-def send_file_list(conn: socket.socket, addr: tuple):
+def enviar_listagem(conn: socket.socket, addr: tuple):
     try:
-        file_list = []
+        lista_arquivos = []
 
         if os.path.exists(SCRIPT_DIR):
             for fn in os.listdir(SCRIPT_DIR):
                 file_path = os.path.join(SCRIPT_DIR, fn)
 
                 if os.path.isfile(file_path):
-                    file_size = os.path.getsize(file_path)
-                    file_list.append({"nome": fn, "tamanho": str(file_size)})
-        print(f"[-] Total de arquivos encontrados: {len(file_list)}")
+                    tamanho_arquivo = os.path.getsize(file_path)
+                    lista_arquivos.append(
+                        {"nome": fn, "tamanho": str(tamanho_arquivo)})
+        print(f"[-] Total de arquivos encontrados: {len(lista_arquivos)}")
 
-        json_data = json.dumps(file_list, ensure_ascii=False, indent=2)
-        json_bytes = json_data.encode("utf-8")
+        json_str = json.dumps(lista_arquivos, ensure_ascii=False, indent=2)
+        json_bytes = json_str.encode("utf-8")
         json_size = len(json_bytes)
 
         status = struct.pack(">B", 0)
         conn.send(status)
 
-        json_size_data = struct.pack(">I", json_size)
-        conn.send(json_size_data)
+        tamanho_json_bytes = struct.pack(">I", json_size)
+        conn.send(tamanho_json_bytes)
 
         conn.send(json_bytes)
 
@@ -109,25 +111,25 @@ def send_file_list(conn: socket.socket, addr: tuple):
         return False
 
 
-def receive_upload(conn: socket.socket, addr: tuple):
+def receber_arquivo(conn: socket.socket, addr: tuple):
     try:
-        file_length_data = conn.recv(4)
+        tamanho_arquivo_bytes = conn.recv(4)
 
-        if not file_length_data:
+        if not tamanho_arquivo_bytes:
             print(f"Cliente {addr} desconectou.")
             return False
 
-        file_name_length = struct.unpack(">I", file_length_data)[0]
-        print(f"[-] Tamanho do nome: {file_name_length} bytes")
+        tamanho_nome_arquivo = struct.unpack(">I", tamanho_arquivo_bytes)[0]
+        print(f"[-] Tamanho do nome: {tamanho_nome_arquivo} bytes")
 
-        file_name_data = conn.recv(file_name_length)
-        file_name = file_name_data.decode('utf-8')
-        print(f"[-] Arquivo a ser recebido {file_name}")
+        nome_arquivo_bytes = conn.recv(tamanho_nome_arquivo)
+        nome_arquivo = nome_arquivo_bytes.decode('utf-8')
+        print(f"[-] Arquivo a ser recebido {nome_arquivo}")
 
-        full_file_path = os.path.join(SCRIPT_DIR, file_name)
-        full_file_path = os.path.normpath(full_file_path)
+        caminho_arquivo = os.path.join(SCRIPT_DIR, nome_arquivo)
+        caminho_arquivo = os.path.normpath(caminho_arquivo)
 
-        if not full_file_path.startswith(os.path.abspath(SCRIPT_DIR)):
+        if not caminho_arquivo.startswith(os.path.abspath(SCRIPT_DIR)):
             print("[!] ATENCAO: Acesso fora do diretório de arquivos negado.")
             status = struct.pack(">B", 1)
             conn.send(status)
@@ -137,28 +139,28 @@ def receive_upload(conn: socket.socket, addr: tuple):
         conn.send(status)
         print("[-] Upload aceito, os bytes serão esperados...")
 
-        file_size_bytes = conn.recv(4)
-        if len(file_size_bytes) != 4:
+        tamanho_arquivo_bytes = conn.recv(4)
+        if len(tamanho_arquivo_bytes) != 4:
             print("ERRO: tamanho de arquivo inválido.")
             return
 
-        file_size = struct.unpack(">I", file_size_bytes)[0]
-        print(f"Tamanho do arquivo: {file_size} bytes")
+        tamanho_arquivo = struct.unpack(">I", tamanho_arquivo_bytes)[0]
+        print(f"Tamanho do arquivo: {tamanho_arquivo} bytes")
 
-        output_name = os.path.join(SCRIPT_DIR, file_name)
+        arquivo_saida = os.path.join(SCRIPT_DIR, nome_arquivo)
 
-        with open(output_name, "wb") as f:
-            bytes_received = 0
-            while bytes_received < file_size:
-                chunk = conn.recv(BUFFSIZE)
+        with open(arquivo_saida, "wb") as f:
+            bytes_recebidos = 0
+            while bytes_recebidos < tamanho_arquivo:
+                chunk = conn.recv(BUFSIZE)
                 if not chunk:
                     break
                 f.write(chunk)
-                bytes_received += len(chunk)
+                bytes_recebidos += len(chunk)
         print(f"Upload concluído! Arquivo salvo em {
-              SCRIPT_DIR.split("/")[-1]}/{file_name}")
+              SCRIPT_DIR.split("/")[-1]}/{nome_arquivo}")
 
-        if bytes_received == file_size:
+        if bytes_recebidos == tamanho_arquivo:
             upload_stauts = struct.pack(">B", 0)
             conn.send(upload_stauts)
             return True
