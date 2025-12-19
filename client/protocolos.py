@@ -4,39 +4,39 @@ import os
 import json
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SCRIPT_DIR = os.path.join(SCRIPT_DIR, "downloaded_files")
+SCRIPT_DIR = os.path.join(SCRIPT_DIR, "arquivos_baixados")
 
 BUFSIZE = 1024
 
 
-def download_file(conn: socket.socket):
-    file_name = input("Informe o nome do arquivo para download: ")
-    if not file_name:
+def baixar_arquivo(conn: socket.socket):
+    nome_arquivo = input("Informe o nome do arquivo para download: ")
+    if not nome_arquivo:
         print("Informe um nome!")
-        exit(1)
+        return
 
-    file_name_length = len(file_name)
+    tamanho_nome_arquivo = len(nome_arquivo)
     try:
         byte_operacao = struct.pack(">B", 10)
         conn.send(byte_operacao)
         print("Enviando código de operacao 10 (download)...")
 
-        fl_bytes = struct.pack(">I", file_name_length)
-        conn.send(fl_bytes)
+        tam_bytes = struct.pack(">I", tamanho_nome_arquivo)
+        conn.send(tam_bytes)
         print("[-] Enviando o tamanho do nome do arquivo...")
 
-        fn_bytes = file_name.encode("utf-8")
-        conn.send(fn_bytes)
+        nome_bytes = nome_arquivo.encode("utf-8")
+        conn.send(nome_bytes)
         print("[-] Enviando o nome do arquivo...")
 
-        print(f"Arquivo {file_name} solicitado com sucesso.")
+        print(f"Arquivo {nome_arquivo} solicitado com sucesso.")
 
-        status_data = conn.recv(1)
-        if not status_data:
+        bytes_status = conn.recv(1)
+        if not bytes_status:
             print("ERRO: Conexao fechada pelo servidor.")
             return
 
-        status = struct.unpack(">B", status_data)[0]
+        status = struct.unpack(">B", bytes_status)[0]
 
         if status == 1:
             print("ERRO: Arquivo não existe no servidor.")
@@ -47,27 +47,27 @@ def download_file(conn: socket.socket):
             print(f"ERRO: Status desconhecido {status}")
             return
 
-        file_size_bytes = conn.recv(4)
-        if len(file_size_bytes) != 4:
+        tamanho_arquivo_bytes = conn.recv(4)
+        if len(tamanho_arquivo_bytes) != 4:
             print("ERRO: tamanho de arquivo inválido.")
             return
 
-        file_size = struct.unpack(">I", file_size_bytes)[0]
-        print(f"Tamanho do arquivo: {file_size} bytes")
+        tamanho_arquivo = struct.unpack(">I", tamanho_arquivo_bytes)[0]
+        print(f"Tamanho do arquivo: {tamanho_arquivo} bytes")
 
-        output_name = os.path.join(SCRIPT_DIR, file_name)
+        nome_saida = os.path.join(SCRIPT_DIR, nome_arquivo)
 
-        with open(output_name, "wb") as f:
-            bytes_received = 0
-            while bytes_received < file_size:
+        with open(nome_saida, "wb") as f:
+            bytes_recebidos = 0
+            while bytes_recebidos < tamanho_arquivo:
                 chunk = conn.recv(BUFSIZE)
                 if not chunk:
                     break
                 f.write(chunk)
-                bytes_received += len(chunk)
+                bytes_recebidos += len(chunk)
 
         print(f"Download concluído! Arquivo salvo em {
-              SCRIPT_DIR.split("/")[-1]}/{file_name}")
+              SCRIPT_DIR.split("/")[-1]}/{nome_arquivo}")
     except socket.timeout:
         print("ERRO: Tempo de espera excedido.")
     except ConnectionRefusedError:
@@ -76,18 +76,18 @@ def download_file(conn: socket.socket):
         print(f"Erro durante download: {e}")
 
 
-def list_files(conn: socket.socket):
+def listar_arquivos(conn: socket.socket):
     try:
         byte_operacao = struct.pack(">B", 20)
         conn.send(byte_operacao)
         print("Enviando código de operacao 20 (listagem de arquivos)")
 
-        status_data = conn.recv(1)
-        if not status_data:
+        bytes_status = conn.recv(1)
+        if not bytes_status:
             print("ERRO: Conexão f3chada pelo servidor.")
             return
 
-        status = struct.unpack(">B", status_data)[0]
+        status = struct.unpack(">B", bytes_status)[0]
 
         if status == 1:
             print("Erro durante o envio de listagem.")
@@ -97,31 +97,31 @@ def list_files(conn: socket.socket):
             return
         print("[-] Recebendo lista de arquivos...")
 
-        list_size_data = conn.recv(4)
-        if len(list_size_data) != 4:
+        tamanho_lista_bytes = conn.recv(4)
+        if len(tamanho_lista_bytes) != 4:
             print("ERRO: Tamanho de lista inválido.")
             return
 
-        list_size = struct.unpack(">I", list_size_data)[0]
-        print(f"[-] Tamanho da lista: {list_size} bytes")
+        tamanho_lista = struct.unpack(">I", tamanho_lista_bytes)[0]
+        print(f"[-] Tamanho da lista: {tamanho_lista} bytes")
 
-        list_data = b""
-        bytes_received = 0
+        lista_bytes = b""
+        bytes_recebidos = 0
 
-        while bytes_received < list_size:
-            chunk = conn.recv(min(BUFSIZE, list_size - bytes_received))
+        while bytes_recebidos < tamanho_lista:
+            chunk = conn.recv(min(BUFSIZE, tamanho_lista - bytes_recebidos))
             if not chunk:
                 print("ERRO: Conexão fechada durante recebimento da lista.")
                 return
-            list_data += chunk
-            bytes_received += len(chunk)
+            lista_bytes += chunk
+            bytes_recebidos += len(chunk)
         try:
-            file_list = list_data.decode("utf-8")
+            lista_arquivos = lista_bytes.decode("utf-8")
 
             print("=" * 20)
             print("Arquivos disponíveis para download: ")
             print("=" * 20)
-            print(file_list)
+            print(lista_arquivos)
             print("=" * 20)
         except json.JSONDecodeError as e:
             print(f"Erro ao decodificar JSON: {e}")
@@ -135,30 +135,37 @@ def list_files(conn: socket.socket):
         print(f"Erro durante download: {e}")
 
 
-def upload_file(conn: socket.socket):
+def upload_arquivo(conn: socket.socket):
 
-    file_name = input("Informe o nome do arquivo para upload: ")
-    if not file_name:
+    nome_arquivo = input("Informe o nome do arquivo para upload: ")
+    if not nome_arquivo:
         print("Informe um nome!")
-        exit(1)
+        return
 
-    file_name_length = len(file_name)
+    caminho_arquivo = os.path.join(SCRIPT_DIR, nome_arquivo)
+    caminho_arquivo = os.path.normpath(caminho_arquivo)
+
+    if not os.path.exists(caminho_arquivo):
+        print(f"ERRO: Arquivo não encontrado: {caminho_arquivo}")
+        return
+
+    tamanho_nome_arquivo = len(nome_arquivo)
 
     try:
         byte_operacao = struct.pack(">B", 30)
         conn.send(byte_operacao)
         print("Enviando código de operacao 30 (upload)...")
 
-        fl_bytes = struct.pack(">I", file_name_length)
-        conn.send(fl_bytes)
+        tam_bytes = struct.pack(">I", tamanho_nome_arquivo)
+        conn.send(tam_bytes)
         print("[-] Tamanho do nome do arquivo enviado.")
 
-        file_name_data = file_name.encode('utf-8')
-        conn.send(file_name_data)
+        nome_arquivo_bytes = nome_arquivo.encode('utf-8')
+        conn.send(nome_arquivo_bytes)
         print("[-] Nome do arquivo enviado.")
 
-        status_data = conn.recv(1)
-        status = struct.unpack(">B", status_data)[0]
+        bytes_status = conn.recv(1)
+        status = struct.unpack(">B", bytes_status)[0]
 
         if status == 1:
             print("Erro não identificado, os bytes não serão esperados.")
@@ -169,39 +176,38 @@ def upload_file(conn: socket.socket):
             print(f"ERRO: Status desconhecido {status}")
             return
 
-        full_file_path = os.path.join(SCRIPT_DIR, file_name)
-        full_file_path = os.path.normpath(full_file_path)
+        tamanho_arquivo = os.path.getsize(caminho_arquivo)
+        print(f"[-] Tamanho do arquivo: {tamanho_arquivo} bytes")
 
-        file_size = os.path.getsize(full_file_path)
-        print(f"[-] Tamanho do arquivo: {file_size} bytes")
+        tamanho_bytes = struct.pack(">I", tamanho_arquivo)
+        conn.send(tamanho_bytes)
 
-        size_bytes = struct.pack(">I", file_size)
-        conn.send(size_bytes)
-
-        if not full_file_path.startswith(os.path.abspath(SCRIPT_DIR)):
+        if not caminho_arquivo.startswith(os.path.abspath(SCRIPT_DIR)):
             print("[!] ATENCAO: Acesso fora do diretório de arquivos negado.")
             status = struct.pack(">B", 0)
             conn.send(status)
             return True
 
-        bytes_sent = 0
-        with open(full_file_path, "rb") as f:
+        bytes_enviados = 0
+        with open(caminho_arquivo, "rb") as f:
             while True:
-                data = f.read(BUFSIZE)
-                if not data:
+                dados = f.read(BUFSIZE)
+                if not dados:
                     break
-                conn.sendall(data)
-                bytes_sent += len(data)
-        print(f"{file_name} enviado com sucesso. ({bytes_sent}) bytes enviados")
+                conn.sendall(dados)
+                bytes_enviados += len(dados)
+        print(f"{nome_arquivo} enviado com sucesso. ({
+              bytes_enviados}) bytes enviados")
 
-        final_status_data = conn.recv(1)
-        if final_status_data:
-            final_status = struct.unpack(">B", final_status_data)[0]
-            if final_status == 0:
+        status_final_byte = conn.recv(1)
+        if status_final_byte:
+            status_final = struct.unpack(">B", status_final_byte)[0]
+            if status_final == 0:
                 print("Servidor confirmou o recebimento com sucesso.")
 
         return True
-        print(f"{file_name} enviado com sucesso. ({bytes_sent}) bytes enviados")
+        print(f"{nome_arquivo} enviado com sucesso. ({
+              bytes_enviados}) bytes enviados")
         return True
     except socket.timeout:
         print("ERRO: Tempo de espera excedido.")
